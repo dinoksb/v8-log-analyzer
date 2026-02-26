@@ -1,0 +1,30 @@
+#!/bin/sh
+
+echo ""
+echo "┌─────────────────────────────────┐"
+echo "│  Pre-commit: 코드 검증 시작...  │"
+echo "└─────────────────────────────────┘"
+
+# 1. 스테이징된 파일만 ESLint 실행 (lint-staged)
+echo ""
+echo "[1/2] Lint-staged 실행 중..."
+pnpm exec lint-staged
+if [ $? -ne 0 ]; then
+  echo ""
+  echo "❌ Lint 오류가 있습니다. 수정 후 다시 커밋하세요."
+  exit 1
+fi
+
+# 2. 전체 타입 검사
+echo ""
+echo "[2/2] TypeScript 타입 검사 중..."
+pnpm exec tsc --noEmit
+if [ $? -ne 0 ]; then
+  echo ""
+  echo "❌ 타입 오류가 있습니다. 수정 후 다시 커밋하세요."
+  exit 1
+fi
+
+echo ""
+echo "✅ 검증 완료. 커밋을 진행합니다."
+echo ""

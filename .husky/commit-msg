@@ -1,0 +1,18 @@
+#!/bin/sh
+
+pnpm exec commitlint --edit "$1"
+
+if [ $? -ne 0 ]; then
+  echo ""
+  echo "❌ 커밋 메시지 형식이 올바르지 않습니다."
+  echo ""
+  echo "  올바른 형식: <type>(<scope>): <subject>"
+  echo "  예시:"
+  echo "    feat(slack): add channel message pagination"
+  echo "    fix(chart): resolve tooltip overflow"
+  echo "    refactor(analysis): extract sentiment calculator"
+  echo ""
+  echo "  사용 가능한 type: feat, fix, refactor, style, docs, test, chore, perf, ci, revert"
+  echo ""
+  exit 1
+fi

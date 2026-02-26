@@ -1,0 +1,101 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '========================================' && echo ' Slack Analyzer - Claude Code Session' && echo '========================================' && echo '' && (test -n \"$SLACK_BOT_TOKEN\" && echo '[OK]  SLACK_BOT_TOKEN 설정됨' || echo '[!!] SLACK_BOT_TOKEN 미설정 - Slack API 호출 불가') && BRANCH=$(git branch --show-current 2>/dev/null) && echo \"[OK]  현재 브랜치: ${BRANCH:-'(git 없음)'}\" && mkdir -p .claude/reviews .claude/plans data && echo '[OK]  작업 디렉토리 준비 완료' && echo '' && echo '[Pipeline] 코드 변경 전 반드시 /implement 실행' && echo '  Explore → Architect → 승인 → Code → Review → Refactor' && echo ''"
+          }
+        ]
+      }
+    ],
+
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "INPUT=$(cat); CMD=$(echo \"$INPUT\" | jq -r '.tool_input.command // empty'); if echo \"$CMD\" | grep -qE '^\\s*(rm\\s+-rf|rimraf|drop\\s+table|truncate\\s+table)'; then echo \"[BLOCKED] 위험한 명령어가 감지되었습니다: $CMD\" >&2; exit 2; fi; if echo \"$CMD\" | grep -qE 'process\\.env\\.' && echo \"$CMD\" | grep -qE '(TOKEN|SECRET|KEY|PASSWORD)'; then echo \"[BLOCKED] 민감한 환경변수를 직접 출력하는 명령어입니다\" >&2; exit 2; fi; if echo \"$CMD\" | grep -qE 'git push.*(--force|-f).*(main|master)'; then echo \"[BLOCKED] main/master 브랜치에 force push는 금지되어 있습니다.\" >&2; exit 2; fi"
+          }
+        ]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "INPUT=$(cat); FILE=$(echo \"$INPUT\" | jq -r '.tool_input.file_path // empty'); if echo \"$FILE\" | grep -qE '(\\.env$|\\.env\\.local$|\\.env\\.production$)'; then echo \"[BLOCKED] .env 파일 직접 수정은 금지되어 있습니다. 환경변수는 직접 설정해주세요.\" >&2; exit 2; fi"
+          }
+        ]
+      }
+    ],
+
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "INPUT=$(cat); FILE=$(echo \"$INPUT\" | jq -r '.tool_input.file_path // .tool_input.path // empty'); if [[ \"$FILE\" == *.ts ]] || [[ \"$FILE\" == *.tsx ]]; then echo ''; echo \"[Auto Lint] $FILE\"; LINT_OUT=$(pnpm exec next lint --file \"$FILE\" 2>&1); LINT_EXIT=$?; echo \"$LINT_OUT\"; if [ $LINT_EXIT -ne 0 ]; then echo ''; echo '[!!] Lint 오류가 발견되었습니다. 위 오류를 수정한 후 계속 진행하세요.'; else echo '[OK] Lint 통과'; fi; fi"
+          },
+          {
+            "type": "command",
+            "command": "INPUT=$(cat); FILE=$(echo \"$INPUT\" | jq -r '.tool_input.file_path // .tool_input.path // empty'); if [[ \"$FILE\" == */src/lib/*.ts ]] && [[ \"$FILE\" != */__tests__/* ]]; then BASENAME=$(basename \"$FILE\" .ts); TEST_FILE=\"$(dirname \"$FILE\")/__tests__/${BASENAME}.test.ts\"; if [ -f \"$TEST_FILE\" ]; then echo ''; echo \"[Auto Test] $BASENAME.test.ts\"; TEST_OUT=$(pnpm exec vitest run \"$TEST_FILE\" 2>&1); TEST_EXIT=$?; echo \"$TEST_OUT\" | tail -20; if [ $TEST_EXIT -ne 0 ]; then echo ''; echo '[!!] 테스트 실패 — 위 오류를 확인하고 수정하세요.'; else echo '[OK] 테스트 통과'; fi; fi; fi"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "INPUT=$(cat); CMD=$(echo \"$INPUT\" | jq -r '.tool_input.command // empty'); if echo \"$CMD\" | grep -qE 'git push'; then BRANCH=$(git branch --show-current 2>/dev/null); echo ''; echo \"[Git] Push 완료 (브랜치: $BRANCH)\"; echo \"→ PR 생성: /pr | 기존 PR 리뷰: /review-pr [번호]\"; fi"
+          }
+        ]
+      }
+    ],
+
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "BRANCH=$(git branch --show-current 2>/dev/null); CHANGES=$(git status --porcelain 2>/dev/null | wc -l | tr -d ' '); if [ \"$CHANGES\" -gt 0 ]; then echo ''; echo '━━━ Git Status ━━━━━━━━━━━━━━━━━━━━━'; echo \"브랜치: ${BRANCH:-unknown}\"; git status --short 2>/dev/null; echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'; echo \"미커밋 ${CHANGES}개 파일 → /commit 실행\"; fi"
+          }
+        ]
+      }
+    ],
+
+    "SubagentStop": [
+      {
+        "matcher": "architect",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "PLAN_COUNT=$(ls .claude/plans/*.md 2>/dev/null | wc -l | tr -d ' '); echo ''; echo '━━━ [architect 완료] ━━━━━━━━━━━━━━━━━━━'; echo \"구현 계획서 생성 완료 (총 ${PLAN_COUNT}개)\"; echo '→ 계획서를 검토하고 승인하면 코드 작성이 시작됩니다.'; echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'"
+          }
+        ]
+      },
+      {
+        "matcher": "code-reviewer",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "CHANGES=$(git status --porcelain 2>/dev/null | wc -l | tr -d ' '); echo ''; echo '━━━ [code-reviewer 완료] ━━━━━━━━━━━━━━━'; if [ \"$CHANGES\" -gt 0 ]; then echo \"변경된 파일 ${CHANGES}개 → /refactor 또는 /commit 실행\"; else echo '변경사항 없음 → 바로 /commit 가능'; fi; echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'"
+          }
+        ]
+      },
+      {
+        "matcher": "pr-reviewer",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo ''; echo '[pr-reviewer 완료] 위 결과를 확인하고 머지 방식을 선택해주세요.'"
+          }
+        ]
+      }
+    ]
+  }
+}

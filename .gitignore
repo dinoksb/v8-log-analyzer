@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Slack collected data (sensitive)
+/data/
+
+# Claude Code local settings
+.claude/settings.local.json
