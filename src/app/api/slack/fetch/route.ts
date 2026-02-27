@@ -6,6 +6,8 @@ import { computeChannelStats } from '@/lib/analysis'
 import { createJob, updateJobProgress, completeJob, failJob, getActiveJobForChannel } from '@/lib/jobStore'
 import { generateId } from '@/lib/utils'
 
+export const maxDuration = 60 // Vercel Pro: 최대 300, Hobby: 최대 60
+
 interface FetchBody {
   channelId: string
   channelName: string
@@ -40,11 +42,11 @@ async function runFetchJob(
 
     revalidatePath('/dashboard')
     revalidatePath('/errors')
-    completeJob(jobId, { errorCount: errors.length, rawPath })
+    await completeJob(jobId, { errorCount: errors.length, rawPath })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error'
     console.error(`[Fetch] Job ${jobId} 실패:`, message)
-    failJob(jobId, message)
+    await failJob(jobId, message)
   }
 }
 
@@ -78,7 +80,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     // 이미 실행 중인 Job이 있으면 중복 실행 차단
-    const existing = getActiveJobForChannel(channelId)
+    const existing = await getActiveJobForChannel(channelId)
     if (existing) {
       console.log(`[Fetch] 중복 요청 차단: #${channelName} 이미 수집 중 (jobId=${existing.id})`)
       return NextResponse.json({ jobId: existing.id, channelId, channelName, status: 'already_running' })
