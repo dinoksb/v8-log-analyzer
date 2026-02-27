@@ -88,7 +88,7 @@ export function computeDashboardStats(
 
   const recentErrors = [...allErrors]
     .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt))
-    .slice(0, 50)
+    .slice(0, 10)
 
   const trendMap = new Map<string, _DailyCount>()
   for (const cs of channelStats) {
