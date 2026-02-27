@@ -279,7 +279,7 @@ export async function fetchThread(
 }
 
 const THREAD_CONCURRENCY = 2  // rate limit 방지: 동시 요청 수를 낮게 유지
-const MAX_THREAD_FETCH = 20   // Vercel 60s 제한 내 완료 가능한 최대 스레드 수
+const MAX_THREAD_FETCH = 0    // 0 = 스레드 수집 스킵 (bulk 수집 시 타임아웃 방지)
 
 async function runWithConcurrency<T>(
   tasks: Array<() => Promise<T>>,
