@@ -327,18 +327,24 @@ export async function collectChannelErrors(
       ))
     : days
 
-  console.log(`[Fetch] #${channelName} 수집 시작 (${effectiveDays}일간)`)
+  const oldestKST = new Date(Number(oldest) * 1000).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })
+  console.log(`[Fetch] #${channelName} 수집 시작 — oldest=${oldest} (${oldestKST}), days=${days}, dateRange=${JSON.stringify(dateRange)}`)
   onProgress?.({ step: 'messages', current: 0, total: 0, message: '채널 히스토리 수집 중...' })
 
   const messages = await fetchChannelHistory(channelId, { token, oldest, latest, onProgress })
 
-  console.log(`[Fetch] 메시지 ${messages.length}개 수집 완료, 오류 필터링 중...`)
+  const sortedTs = [...messages].sort((a, b) => a.ts.localeCompare(b.ts))
+  console.log(`[Fetch] 메시지 ${messages.length}개 수집 완료 — 첫: ${sortedTs[0]?.ts} 마지막: ${sortedTs.at(-1)?.ts}`)
   onProgress?.({ step: 'filter', current: 0, total: messages.length, message: `메시지 ${messages.length}개 필터링 중...` })
 
   // Count error candidates to show accurate thread progress
   const errorCandidates = messages.filter((m) => {
     const isReply = m.threadTs && m.threadTs !== m.ts
-    return !isReply && isErrorMessage(m.text)
+    if (isReply) return false
+    // msg.text가 비어있는 블록 전용 메시지도 블록 텍스트로 재검사
+    const blockText = (m.rawBlocks ?? []).map(getBlockText).filter(Boolean).join('\n')
+    const fullText = [m.text, blockText].filter(Boolean).join('\n')
+    return isErrorMessage(fullText)
   })
   const threadsToFetch = errorCandidates.filter((m) => m.replyCount > 0).length
   console.log(`[Fetch] 오류 후보 ${errorCandidates.length}개, 스레드 ${threadsToFetch}개 수집 예정`)

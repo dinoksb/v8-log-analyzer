@@ -78,7 +78,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     revalidatePath('/dashboard')
     revalidatePath('/errors')
 
-    return NextResponse.json({ success: true, errorCount: errors.length, channelId, channelName })
+    const debugOldest = dateRange?.oldest ?? 'computed-in-slack-lib'
+    return NextResponse.json({ success: true, errorCount: errors.length, channelId, channelName, _debug: { oldest: debugOldest, startDate, endDate, days } })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error'
     console.error('[Fetch] 실패:', message)
