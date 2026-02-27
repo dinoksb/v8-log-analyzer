@@ -28,8 +28,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     let effectiveDays = days
 
     if (startDate) {
-      const oldestMs = new Date(startDate).getTime()
-      const latestMs = endDate ? new Date(`${endDate}T23:59:59.999Z`).getTime() : Date.now()
+      // 날짜 문자열을 KST(UTC+9) 기준으로 파싱. new Date("YYYY-MM-DD")는 UTC 자정으로
+      // 해석되어 한국시간 00:00~09:00 구간 메시지가 누락되는 문제를 방지한다.
+      const oldestMs = new Date(`${startDate}T00:00:00+09:00`).getTime()
+      const latestMs = endDate ? new Date(`${endDate}T23:59:59.999+09:00`).getTime() : Date.now()
 
       if (isNaN(oldestMs)) {
         return NextResponse.json({ error: 'Invalid startDate' }, { status: 400 })
