@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS error_events (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_error_events_channel ON error_events(channel);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_error_events_channel_ts ON error_events(channel, ts);
 CREATE INDEX IF NOT EXISTS idx_error_events_occurred_at ON error_events(occurred_at DESC);
 
 -- Error Analyses Table

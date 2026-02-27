@@ -73,18 +73,20 @@ export class SupabaseStorage implements StorageAdapter {
   }
 
   async saveRawData(channel: string, data: SlackFetchData): Promise<string> {
-    const id = `${channel}_${new Date().toISOString().replace(/[:.]/g, '-')}`
-    const { error } = await this.client.from('raw_fetches').insert({
-      id,
-      channel,
-      channel_name: data.channelName,
-      fetched_at: data.fetchedAt,
-      days: data.days,
-      data,
-    })
+    const { error } = await this.client.from('raw_fetches').upsert(
+      {
+        id: channel,
+        channel,
+        channel_name: data.channelName,
+        fetched_at: data.fetchedAt,
+        days: data.days,
+        data,
+      },
+      { onConflict: 'id' },
+    )
 
     if (error) throw new Error(`Failed to save raw data: ${error.message}`)
-    return id
+    return channel
   }
 
   async loadErrorEvents(channel: string): Promise<ErrorEvent[]> {
@@ -104,7 +106,7 @@ export class SupabaseStorage implements StorageAdapter {
     const rows = errors.map(errorToRow)
     const { error } = await this.client
       .from('error_events')
-      .upsert(rows, { onConflict: 'id' })
+      .upsert(rows, { onConflict: 'channel,ts', ignoreDuplicates: true })
 
     if (error) throw new Error(`Failed to save error events: ${error.message}`)
   }

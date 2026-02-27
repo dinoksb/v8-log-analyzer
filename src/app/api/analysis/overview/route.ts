@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getStorageAdapter } from '@/lib/storage/factory'
 import { computeChannelStats, computeDashboardStats } from '@/lib/analysis'
-import { analyzeDashboard } from '@/lib/claude'
+import { analyzeDashboard } from '@/lib/google'
 
 export const dynamic = 'force-dynamic'
 

@@ -8,7 +8,7 @@ import {
   SlackFetchData,
   Agent8ErrorDetail,
 } from '@/lib/types'
-import { slackTsToDate, extractErrorTitle, extractTags, generateId } from '@/lib/utils'
+import { slackTsToDate, extractErrorTitle, extractTags } from '@/lib/utils'
 
 const TARGET_CHANNEL_ID = process.env.SLACK_CHANNEL_ID ?? 'C097DFK0E1K'
 
@@ -362,7 +362,7 @@ export async function collectChannelErrors(
     const errorDetail = parseAgent8Detail(msg, thread)
 
     const event: ErrorEvent = {
-      id: generateId('err'),
+      id: `err_${channelId}_${msg.ts.replace('.', '_')}`,
       channel: channelId,
       channelName,
       title: extractErrorTitle(msg.text),

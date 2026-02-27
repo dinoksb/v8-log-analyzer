@@ -1,13 +1,13 @@
-import OpenAI from 'openai'
+import { GoogleGenerativeAI } from '@google/generative-ai'
 import { ErrorEvent, ErrorAnalysis, RootCause, Solution, DashboardStats, DashboardAnalysis } from '@/lib/types'
 import { generateId } from '@/lib/utils'
 
-const MODEL = 'gpt-4o'
+const MODEL = 'gemini-2.0-flash'
 
-function getClient(): OpenAI {
-  const apiKey = process.env.OPENAI_API_KEY
-  if (!apiKey) throw new Error('OPENAI_API_KEY is not set')
-  return new OpenAI({ apiKey })
+function getClient(): GoogleGenerativeAI {
+  const apiKey = process.env.GOOGLE_API_KEY
+  if (!apiKey) throw new Error('GOOGLE_API_KEY is not set')
+  return new GoogleGenerativeAI(apiKey)
 }
 
 const SYSTEM_PROMPT = `You are a senior SRE (Site Reliability Engineer) and backend engineer specializing in production incident analysis.
@@ -83,7 +83,7 @@ function parseAnalysisResponse(content: string): AnalysisResponse {
 }
 
 export async function analyzeError(event: ErrorEvent): Promise<ErrorAnalysis> {
-  const client = getClient()
+  const genAI = getClient()
   const analysisId = generateId('analysis')
 
   const pendingAnalysis: ErrorAnalysis = {
@@ -97,18 +97,18 @@ export async function analyzeError(event: ErrorEvent): Promise<ErrorAnalysis> {
   }
 
   try {
-    const response = await client.chat.completions.create({
+    const model = genAI.getGenerativeModel({
       model: MODEL,
-      max_tokens: 2048,
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: buildUserPrompt(event) },
-      ],
+      systemInstruction: SYSTEM_PROMPT,
+      generationConfig: {
+        responseMimeType: 'application/json',
+        maxOutputTokens: 2048,
+      },
     })
 
-    const content = response.choices[0]?.message?.content
-    if (!content) throw new Error('No text response from OpenAI')
+    const result = await model.generateContent(buildUserPrompt(event))
+    const content = result.response.text()
+    if (!content) throw new Error('No text response from Gemini')
 
     const parsed = parseAnalysisResponse(content)
 
@@ -190,20 +190,20 @@ function buildDashboardPrompt(stats: DashboardStats): string {
 }
 
 export async function analyzeDashboard(stats: DashboardStats): Promise<DashboardAnalysis> {
-  const client = getClient()
+  const genAI = getClient()
 
-  const response = await client.chat.completions.create({
+  const model = genAI.getGenerativeModel({
     model: MODEL,
-    max_tokens: 1500,
-    response_format: { type: 'json_object' },
-    messages: [
-      { role: 'system', content: DASHBOARD_SYSTEM_PROMPT },
-      { role: 'user', content: buildDashboardPrompt(stats) },
-    ],
+    systemInstruction: DASHBOARD_SYSTEM_PROMPT,
+    generationConfig: {
+      responseMimeType: 'application/json',
+      maxOutputTokens: 1500,
+    },
   })
 
-  const content = response.choices[0]?.message?.content
-  if (!content) throw new Error('No text response from OpenAI')
+  const result = await model.generateContent(buildDashboardPrompt(stats))
+  const content = result.response.text()
+  if (!content) throw new Error('No text response from Gemini')
 
   const parsed = JSON.parse(content) as DashboardAnalysis
 
