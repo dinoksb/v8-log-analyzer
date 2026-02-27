@@ -5,8 +5,8 @@ import { generateId } from '@/lib/utils'
 const MODEL = 'gemini-2.0-flash'
 
 function getClient(): GoogleGenerativeAI {
-  const apiKey = process.env.GOOGLE_API_KEY
-  if (!apiKey) throw new Error('GOOGLE_API_KEY is not set')
+  const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY
+  if (!apiKey) throw new Error('GOOGLE_GENERATIVE_AI_API_KEY is not set')
   return new GoogleGenerativeAI(apiKey)
 }
 
