@@ -3,51 +3,15 @@ import { revalidatePath } from 'next/cache'
 import { collectChannelErrors } from '@/lib/slack'
 import { getStorageAdapter } from '@/lib/storage/factory'
 import { computeChannelStats } from '@/lib/analysis'
-import { createJob, updateJobProgress, completeJob, failJob, getActiveJobForChannel } from '@/lib/jobStore'
-import { generateId } from '@/lib/utils'
 
-export const maxDuration = 60 // Vercel Pro: 최대 300, Hobby: 최대 60
+export const maxDuration = 60 // Vercel Pro: 최대 300s, Hobby: 최대 60s
 
 interface FetchBody {
   channelId: string
   channelName: string
   days?: number
-  startDate?: string  // 'YYYY-MM-DD'
-  endDate?: string    // 'YYYY-MM-DD'
-}
-
-async function runFetchJob(
-  jobId: string,
-  channelId: string,
-  channelName: string,
-  effectiveDays: number,
-  dateRange?: { oldest: string; latest?: string }
-): Promise<void> {
-  try {
-    const { errors, fetchData } = await collectChannelErrors(
-      channelId,
-      channelName,
-      effectiveDays,
-      undefined,
-      dateRange,
-      (progress) => updateJobProgress(jobId, progress)
-    )
-
-    const storage = getStorageAdapter()
-    const rawPath = await storage.saveRawData(channelId, fetchData)
-    await storage.saveErrorEvents(channelId, errors)
-
-    const stats = computeChannelStats(channelId, channelName, errors, effectiveDays)
-    await storage.saveStats(channelId, stats)
-
-    revalidatePath('/dashboard')
-    revalidatePath('/errors')
-    await completeJob(jobId, { errorCount: errors.length, rawPath })
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error'
-    console.error(`[Fetch] Job ${jobId} 실패:`, message)
-    await failJob(jobId, message)
-  }
+  startDate?: string // 'YYYY-MM-DD'
+  endDate?: string // 'YYYY-MM-DD'
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
@@ -64,9 +28,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     if (startDate) {
       const oldestMs = new Date(startDate).getTime()
-      const latestMs = endDate
-        ? new Date(`${endDate}T23:59:59.999Z`).getTime()
-        : Date.now()
+      const latestMs = endDate ? new Date(`${endDate}T23:59:59.999Z`).getTime() : Date.now()
 
       if (isNaN(oldestMs)) {
         return NextResponse.json({ error: 'Invalid startDate' }, { status: 400 })
@@ -79,24 +41,28 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       effectiveDays = Math.max(1, Math.ceil((latestMs - oldestMs) / (24 * 60 * 60 * 1000)))
     }
 
-    // 이미 실행 중인 Job이 있으면 중복 실행 차단
-    const existing = await getActiveJobForChannel(channelId)
-    if (existing) {
-      console.log(`[Fetch] 중복 요청 차단: #${channelName} 이미 수집 중 (jobId=${existing.id})`)
-      return NextResponse.json({ jobId: existing.id, channelId, channelName, status: 'already_running' })
-    }
+    const { errors, fetchData } = await collectChannelErrors(
+      channelId,
+      channelName,
+      effectiveDays,
+      undefined,
+      dateRange,
+    )
 
-    const jobId = generateId('job')
-    createJob(jobId, channelId, channelName)
+    const storage = getStorageAdapter()
+    await storage.saveRawData(channelId, fetchData)
+    await storage.saveErrorEvents(channelId, errors)
 
-    console.log(`[Fetch] Job 시작: ${jobId} (#${channelName}, ${effectiveDays}일)`)
+    const stats = computeChannelStats(channelId, channelName, errors, effectiveDays)
+    await storage.saveStats(channelId, stats)
 
-    // 백그라운드에서 실행 — await하지 않음
-    void runFetchJob(jobId, channelId, channelName, effectiveDays, dateRange)
+    revalidatePath('/dashboard')
+    revalidatePath('/errors')
 
-    return NextResponse.json({ jobId, channelId, channelName, status: 'started' })
+    return NextResponse.json({ success: true, errorCount: errors.length, channelId, channelName })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error'
+    console.error('[Fetch] 실패:', message)
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }
