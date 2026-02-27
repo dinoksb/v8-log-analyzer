@@ -2,6 +2,8 @@ import { Header } from '@/components/layout/Header'
 import { PageContainer } from '@/components/layout/PageContainer'
 import { ErrorList } from '@/components/errors/ErrorList'
 import { PaginatedErrors } from '@/lib/types'
+import { getStorageAdapter } from '@/lib/storage/factory'
+import { filterErrors, paginateErrors } from '@/lib/analysis'
 
 interface Props {
   params: Promise<{ channelId: string }>
@@ -10,11 +12,16 @@ interface Props {
 
 async function getChannelErrors(channelId: string, searchParams: Record<string, string>): Promise<PaginatedErrors | null> {
   try {
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? 'http://localhost:3000'
-    const params = new URLSearchParams({ channel: channelId, ...searchParams })
-    const res = await fetch(`${baseUrl}/api/errors?${params.toString()}`, { cache: 'no-store' })
-    if (!res.ok) return null
-    return res.json() as Promise<PaginatedErrors>
+    const storage = getStorageAdapter()
+    let errors = await storage.loadAllErrorEvents()
+    errors = errors.sort((a, b) => b.occurredAt.localeCompare(a.occurredAt))
+
+    const page = parseInt(searchParams.page ?? '1', 10)
+    const pageSize = parseInt(searchParams.pageSize ?? '20', 10)
+    const filtered = filterErrors(errors, { channel: channelId, search: searchParams.search })
+    const { errors: paginated, total, totalPages } = paginateErrors(filtered, page, pageSize)
+
+    return { errors: paginated, total, page, pageSize, totalPages }
   } catch {
     return null
   }

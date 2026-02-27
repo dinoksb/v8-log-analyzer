@@ -2,14 +2,12 @@ import { Header } from '@/components/layout/Header'
 import { PageContainer } from '@/components/layout/PageContainer'
 import { ChannelFetcher } from '@/components/channels/ChannelFetcher'
 import { SlackChannel } from '@/lib/types'
+import { getTargetChannel } from '@/lib/slack'
 
 async function getChannels(): Promise<SlackChannel[]> {
   try {
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? 'http://localhost:3000'
-    const res = await fetch(`${baseUrl}/api/slack/channels`, { cache: 'no-store' })
-    if (!res.ok) return []
-    const data = (await res.json()) as { channels: SlackChannel[] }
-    return data.channels
+    const channel = await getTargetChannel()
+    return [channel]
   } catch {
     return []
   }

@@ -4,6 +4,7 @@ import { Header } from '@/components/layout/Header'
 import { PageContainer } from '@/components/layout/PageContainer'
 import { ErrorDetail } from '@/components/errors/ErrorDetail'
 import { ErrorEvent } from '@/lib/types'
+import { getStorageAdapter } from '@/lib/storage/factory'
 
 interface Props {
   params: Promise<{ errorId: string }>
@@ -11,11 +12,17 @@ interface Props {
 
 async function getError(errorId: string): Promise<ErrorEvent | null> {
   try {
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? 'http://localhost:3000'
-    const res = await fetch(`${baseUrl}/api/errors/${errorId}`, { cache: 'no-store' })
-    if (!res.ok) return null
-    const data = (await res.json()) as { error: ErrorEvent }
-    return data.error
+    const storage = getStorageAdapter()
+    const allErrors = await storage.loadAllErrorEvents()
+    const error = allErrors.find((e) => e.id === errorId)
+    if (!error) return null
+
+    if (!error.analysis) {
+      const analysis = await storage.loadAnalysis(errorId)
+      if (analysis) error.analysis = analysis
+    }
+
+    return error
   } catch {
     return null
   }

@@ -4,7 +4,11 @@ import { PageContainer } from '@/components/layout/PageContainer'
 import { FilterBar } from '@/components/errors/FilterBar'
 import { ErrorList } from '@/components/errors/ErrorList'
 import { Spinner } from '@/components/ui/Spinner'
-import { PaginatedErrors } from '@/lib/types'
+import { getStorageAdapter } from '@/lib/storage/factory'
+import { filterErrors, paginateErrors } from '@/lib/analysis'
+import type { PaginatedErrors } from '@/lib/types'
+
+export const dynamic = 'force-dynamic'
 
 interface Props {
   searchParams: Promise<Record<string, string>>
@@ -12,11 +16,22 @@ interface Props {
 
 async function getErrors(searchParams: Record<string, string>): Promise<PaginatedErrors | null> {
   try {
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? 'http://localhost:3000'
-    const params = new URLSearchParams(searchParams)
-    const res = await fetch(`${baseUrl}/api/errors?${params.toString()}`, { cache: 'no-store' })
-    if (!res.ok) return null
-    return res.json() as Promise<PaginatedErrors>
+    const storage = getStorageAdapter()
+    let errors = await storage.loadAllErrorEvents()
+    errors = errors.sort((a, b) => b.occurredAt.localeCompare(a.occurredAt))
+
+    const hasAnalysisParam = searchParams.hasAnalysis
+    const filtered = filterErrors(errors, {
+      channel: searchParams.channel,
+      search: searchParams.search,
+      hasAnalysis: hasAnalysisParam === undefined ? undefined : hasAnalysisParam === 'true',
+    })
+
+    const page = parseInt(searchParams.page ?? '1', 10)
+    const pageSize = parseInt(searchParams.pageSize ?? '20', 10)
+    const { errors: paginated, total, totalPages } = paginateErrors(filtered, page, pageSize)
+
+    return { errors: paginated, total, page, pageSize, totalPages }
   } catch {
     return null
   }
@@ -45,10 +60,7 @@ export default async function ErrorsPage({ searchParams }: Props) {
 
   return (
     <>
-      <Header
-        title="오류 목록"
-        description="수집된 모든 오류와 AI 분석 현황"
-      />
+      <Header title="오류 목록" description="수집된 모든 오류와 AI 분석 현황" />
       <PageContainer>
         <div className="space-y-4">
           <Suspense fallback={null}>
