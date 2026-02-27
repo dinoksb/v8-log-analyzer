@@ -306,9 +306,19 @@ export async function collectChannelErrors(
   dateRange?: { oldest: string; latest?: string },
   onProgress?: ProgressCallback
 ): Promise<{ errors: ErrorEvent[]; fetchData: SlackFetchData }> {
-  const oldest = dateRange?.oldest ?? String(
-    Math.floor((Date.now() - days * 24 * 60 * 60 * 1000) / 1000)
-  )
+  // days 기반 수집 시 KST 자정 기준으로 정렬: "N일" = N개 달력 날짜.
+  // Date.now() - N*24h 방식은 수집 시각에 따라 당일 초반 메시지가 잘리는 문제가 있다.
+  const oldest = dateRange?.oldest ?? (() => {
+    const kstNow = new Date(Date.now() + 9 * 60 * 60 * 1000)
+    const [y, m, d] = kstNow.toISOString().slice(0, 10).split('-').map(Number)
+    const startLocal = new Date(y, m - 1, d - (days - 1))
+    const startStr = [
+      startLocal.getFullYear(),
+      String(startLocal.getMonth() + 1).padStart(2, '0'),
+      String(startLocal.getDate()).padStart(2, '0'),
+    ].join('-')
+    return String(Math.floor(new Date(`${startStr}T00:00:00+09:00`).getTime() / 1000))
+  })()
   const latest = dateRange?.latest
 
   const effectiveDays = dateRange
