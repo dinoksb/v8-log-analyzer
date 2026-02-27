@@ -102,11 +102,6 @@ export function ErrorDetail({ error }: Props) {
         </Card>
       )}
 
-      <Card title="원문 메시지">
-        <pre className="overflow-x-auto whitespace-pre-wrap break-all font-mono text-xs text-gray-700 dark:text-gray-300">
-          <code>{error.rawText}</code>
-        </pre>
-      </Card>
     </div>
   )
 }

@@ -9,11 +9,11 @@ interface Props {
 
 export function RecentErrors({ errors }: Props) {
   return (
-    <Card title={`최근 발생 오류 (${errors.length}개)`}>
+    <Card title={`최근 발생 오류 (${errors.length}개)`} className="max-h-[760px]">
       {errors.length === 0 ? (
         <p className="text-sm text-gray-400">오류 데이터가 없습니다.</p>
       ) : (
-        <ul className="divide-y divide-gray-100 dark:divide-gray-700">
+        <ul className="flex-1 min-h-0 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-700">
           {errors.map((error) => (
             <li key={error.id} className="py-3">
               <Link

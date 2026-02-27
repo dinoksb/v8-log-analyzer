@@ -1,6 +1,5 @@
 import { TopErrorItem } from '@/lib/types'
 import { Card } from '@/components/ui/Card'
-import { formatRelativeTime } from '@/lib/utils'
 
 interface Props {
   items: TopErrorItem[]
@@ -10,17 +9,11 @@ export function TopErrors({ items }: Props) {
   const maxCount = items[0]?.count ?? 1
 
   return (
-    <Card title="자주 발생한 오류">
+    <Card title="자주 발생한 오류" className="max-h-[760px]">
       {items.length === 0 ? (
         <p className="text-sm text-gray-400">오류 데이터가 없습니다.</p>
       ) : (
-        <ol
-          className={`space-y-3 ${
-            items.length > 10
-              ? 'max-h-[520px] overflow-y-auto pr-1'
-              : ''
-          }`}
-        >
+        <ol className="flex-1 min-h-0 overflow-y-auto space-y-3 pr-1">
           {items.map((item, index) => (
             <li key={item.title} className="flex items-start gap-3">
               <span className="mt-0.5 w-5 shrink-0 text-right text-xs font-semibold text-gray-400 dark:text-gray-500">
@@ -39,9 +32,6 @@ export function TopErrors({ items }: Props) {
                   </div>
                   <span className="shrink-0 text-xs font-semibold text-gray-700 dark:text-gray-300">
                     {item.count.toLocaleString()}회
-                  </span>
-                  <span className="shrink-0 text-xs text-gray-400 dark:text-gray-500">
-                    최근 {formatRelativeTime(item.lastOccurredAt)}
                   </span>
                 </div>
               </div>
