@@ -56,37 +56,6 @@ SLACK_BOT_TOKEN=xoxb-...        # Slack Bot Token (필수)
 SLACK_SIGNING_SECRET=...        # Slack Signing Secret
 ```
 
-## Development Pipeline
-
-**코드 수정 전 반드시 `/implement` 파이프라인을 실행해야 합니다.**
-각 단계는 에이전트가 이전 에이전트의 결과를 받아 이어서 작업합니다.
-
-```
-/implement <태스크>
-  ↓
-  [Phase 1] Explore Agent   → 코드베이스 구조 분석 보고서
-              ↓ (보고서 전달)
-  [Phase 2] Architect Agent → 구현 계획서 수립 (.claude/plans/ 저장)
-              ↓ (계획서 전달)
-  [Phase 3] 사용자 승인      → 계획서 검토·승인 (EnterPlanMode)
-              ↓ (승인 후만 진행)
-  [Phase 4] Code Writing    → 승인된 계획으로 신규 코드 작성
-              ↓ (작성 파일 목록 전달)
-  [Phase 5] code-reviewer   → 코드 리뷰 (.claude/reviews/ 저장)
-              ↓ (리뷰 결과 전달)
-  [Phase 6] Refactoring     → Critical/Warning 이슈 수정
-              ↓
-  [Phase 7] Final Apply     → lint 검증 + 완료 보고
-```
-
-파일 저장 시 자동 실행되는 훅:
-```
-파일 저장 (Write/Edit)
-  ↓ [PostToolUse Hook] ESLint 자동 실행
-  ↓ lint 오류 있으면 즉시 수정
-  ↓ src/lib/*.ts 수정 시 vitest 자동 실행
-```
-
 ## Git Workflow (Mode A)
 
 ### 브랜치 전략
@@ -100,19 +69,14 @@ main          ← 프로덕션 (force push 금지)
 
 ### 전체 파이프라인
 ```
-/branch feat/slack-collector          브랜치 생성
+/branch feat/slack-collector   브랜치 생성
         ↓
-  /implement <태스크>                  에이전트 협업 파이프라인
-    [Explore] → [Architect] → 사용자 승인
-    → 코드 작성 → [code-reviewer] → 리팩토링
-        ↓ [PostToolUse] ESLint + vitest 자동 실행
+  코드 작성
         ↓
   /commit    → diff 분석 → Conventional Commit 메시지 생성
         ↓ [husky] lint-staged → tsc → commitlint 자동 검증
-        ↓ [Stop Hook] git status 표시
         ↓
   /pr        → 커밋 이력 기반 PR description 자동 생성
-        ↓ [PostToolUse] "PR 생성됨 → /review-pr [번호]"
         ↓
   /review-pr [번호]   → pr-reviewer agent (Mode A)
         ↓               리뷰 → 수정 → push → CI 확인 자동
@@ -139,7 +103,6 @@ main          ← 프로덕션 (force push 금지)
 
 | 명령어 | 설명 |
 |--------|------|
-| `/implement` | **[필수] 코드 변경 전 전체 에이전트 협업 파이프라인** |
 | `/branch` | 컨벤션 브랜치 생성 |
 | `/commit` | diff 분석 후 Conventional Commit |
 | `/pr` | 현재 브랜치로 PR 생성 |
@@ -154,7 +117,6 @@ main          ← 프로덕션 (force push 금지)
 
 | Agent | 역할 |
 |-------|------|
-| `architect` | 코드베이스 구조 분석 + 구현 계획 수립 (`/implement` Phase 1-2) |
 | `pr-reviewer` | PR 리뷰·수정·푸시 자동화 (Mode A, 머지는 사용자 확인) |
 | `code-reviewer` | 코드 품질·보안·패턴 리뷰 |
 | `data-validator` | Slack JSON 데이터 품질 검증 |
@@ -162,8 +124,6 @@ main          ← 프로덕션 (force push 금지)
 
 ## Important Rules
 
-- **코드 수정 전 반드시 `/implement` 파이프라인 실행** (구조파악 → 계획 → 승인 → 코드작성 → 리뷰 → 리팩토링)
 - `data/` 폴더의 JSON 파일은 직접 수정 금지 (수집 스크립트로만 생성)
-- 컴포넌트 생성 후 반드시 `/review` 실행
 - API route 수정 시 에러 핸들링 확인 필수
 - `.env` 파일은 절대 커밋 금지

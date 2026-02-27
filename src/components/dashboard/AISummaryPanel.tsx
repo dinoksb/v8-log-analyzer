@@ -69,7 +69,8 @@ export function AISummaryPanel() {
   const [analysis, setAnalysis] = useState<DashboardAnalysis | null>(null)
   const [errorMsg, setErrorMsg] = useState<string>('')
 
-  const fetchAnalysis = useCallback(async () => {
+  // DB에서 분석 결과 로드 (AI 호출 없음)
+  const loadAnalysis = useCallback(async () => {
     setStatus('loading')
     setErrorMsg('')
     try {
@@ -92,7 +93,32 @@ export function AISummaryPanel() {
     }
   }, [])
 
-  // 마운트 시 캐시가 있으면 API 호출 없이 표시, 없을 때만 1회 분석
+  // 수동 재분석 트리거 (AI 호출 1회 → DB 저장 → 화면 갱신)
+  const triggerReanalyze = useCallback(async () => {
+    setStatus('loading')
+    setErrorMsg('')
+    clearCache()
+    try {
+      const res = await fetch('/api/analysis/overview', { method: 'POST' })
+      if (res.status === 404) {
+        setStatus('empty')
+        return
+      }
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string }
+        throw new Error(body.error ?? `HTTP ${res.status}`)
+      }
+      const data = await res.json() as DashboardAnalysis
+      saveCache(data)
+      setAnalysis(data)
+      setStatus('loaded')
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : String(e))
+      setStatus('error')
+    }
+  }, [])
+
+  // 마운트 시 캐시가 있으면 표시, 없으면 DB 로드
   useEffect(() => {
     const cached = loadCache()
     if (cached) {
@@ -100,23 +126,22 @@ export function AISummaryPanel() {
       setStatus('loaded')
       return
     }
-    void fetchAnalysis()
-  }, [fetchAnalysis])
+    void loadAnalysis()
+  }, [loadAnalysis])
 
-  // 데이터 수집 완료 이벤트 수신 → 캐시 무효화 후 재분석
+  // 데이터 수집 완료 이벤트 수신 → 캐시 무효화 후 DB 재로드 (fetch route가 AI 분석 완료 후 저장)
   useEffect(() => {
     const handleDataCollected = () => {
       clearCache()
-      void fetchAnalysis()
+      void loadAnalysis()
     }
     window.addEventListener('slack-data-collected', handleDataCollected)
     return () => window.removeEventListener('slack-data-collected', handleDataCollected)
-  }, [fetchAnalysis])
+  }, [loadAnalysis])
 
   const handleReanalyze = useCallback(() => {
-    clearCache()
-    void fetchAnalysis()
-  }, [fetchAnalysis])
+    void triggerReanalyze()
+  }, [triggerReanalyze])
 
   const headerAction = (
     <Button
@@ -143,7 +168,7 @@ export function AISummaryPanel() {
       {status === 'error' && (
         <div className="space-y-3">
           <p className="text-sm text-red-600 dark:text-red-400">{errorMsg}</p>
-          <Button variant="secondary" size="sm" onClick={fetchAnalysis}>
+          <Button variant="secondary" size="sm" onClick={handleReanalyze}>
             다시 시도
           </Button>
         </div>

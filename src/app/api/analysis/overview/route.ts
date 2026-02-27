@@ -5,7 +5,25 @@ import { analyzeDashboard } from '@/lib/google'
 
 export const dynamic = 'force-dynamic'
 
+// DB에 저장된 분석 결과 로드 (AI 호출 없음)
 export async function GET(): Promise<NextResponse> {
+  try {
+    const storage = getStorageAdapter()
+    const analysis = await storage.loadDashboardAnalysis()
+
+    if (!analysis) {
+      return NextResponse.json({ error: 'No analysis found' }, { status: 404 })
+    }
+
+    return NextResponse.json(analysis)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error'
+    return NextResponse.json({ error: message }, { status: 500 })
+  }
+}
+
+// 수동 재분석 트리거 → AI 호출 후 DB 저장
+export async function POST(): Promise<NextResponse> {
   try {
     const storage = getStorageAdapter()
     const channels = await storage.listChannels()
@@ -40,6 +58,7 @@ export async function GET(): Promise<NextResponse> {
     )
 
     const analysis = await analyzeDashboard(dashboard)
+    await storage.saveDashboardAnalysis(analysis)
 
     return NextResponse.json(analysis)
   } catch (error) {

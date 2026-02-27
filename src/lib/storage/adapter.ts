@@ -1,4 +1,4 @@
-import { ErrorEvent, ErrorAnalysis, ChannelStats, SlackFetchData } from '@/lib/types'
+import { ErrorEvent, ErrorAnalysis, ChannelStats, SlackFetchData, DashboardAnalysis } from '@/lib/types'
 
 export interface StorageAdapter {
   saveRawData(channel: string, data: SlackFetchData): Promise<string>
@@ -11,4 +11,6 @@ export interface StorageAdapter {
   loadStats(channel: string): Promise<ChannelStats | null>
   listChannels(): Promise<string[]>
   loadAllErrorEvents(): Promise<ErrorEvent[]>
+  saveDashboardAnalysis(analysis: DashboardAnalysis): Promise<void>
+  loadDashboardAnalysis(): Promise<DashboardAnalysis | null>
 }

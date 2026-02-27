@@ -1,5 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
-import { ErrorEvent, ErrorAnalysis, ChannelStats, SlackFetchData } from '@/lib/types'
+import { ErrorEvent, ErrorAnalysis, ChannelStats, SlackFetchData, DashboardAnalysis } from '@/lib/types'
 import { StorageAdapter } from './adapter'
 
 function createSupabaseClient(): SupabaseClient {
@@ -235,5 +235,39 @@ export class SupabaseStorage implements StorageAdapter {
 
     if (error) throw new Error(`Failed to load all error events: ${error.message}`)
     return (data ?? []).map(rowToErrorEvent)
+  }
+
+  async saveDashboardAnalysis(analysis: DashboardAnalysis): Promise<void> {
+    const { error } = await this.client.from('dashboard_analyses').upsert(
+      {
+        id: 'latest',
+        headline: analysis.headline,
+        overview: analysis.overview,
+        insights: analysis.insights,
+        analyzed_at: analysis.analyzedAt,
+      },
+      { onConflict: 'id' },
+    )
+
+    if (error) throw new Error(`Failed to save dashboard analysis: ${error.message}`)
+  }
+
+  async loadDashboardAnalysis(): Promise<DashboardAnalysis | null> {
+    const { data, error } = await this.client
+      .from('dashboard_analyses')
+      .select('*')
+      .eq('id', 'latest')
+      .maybeSingle()
+
+    if (error) return null
+    if (!data) return null
+
+    const row = data as Record<string, unknown>
+    return {
+      headline: row.headline as string,
+      overview: row.overview as string,
+      insights: (row.insights as string[]) ?? [],
+      analyzedAt: row.analyzed_at as string,
+    }
   }
 }

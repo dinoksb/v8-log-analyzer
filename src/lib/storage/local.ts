@@ -1,6 +1,6 @@
 import fs from 'fs/promises'
 import path from 'path'
-import { ErrorEvent, ErrorAnalysis, ChannelStats, SlackFetchData } from '@/lib/types'
+import { ErrorEvent, ErrorAnalysis, ChannelStats, SlackFetchData, DashboardAnalysis } from '@/lib/types'
 import { StorageAdapter } from './adapter'
 
 const DATA_DIR = path.join(process.cwd(), 'data')
@@ -99,5 +99,15 @@ export class LocalFileStorage implements StorageAdapter {
       all.push(...errors)
     }
     return all
+  }
+
+  async saveDashboardAnalysis(analysis: DashboardAnalysis): Promise<void> {
+    const filePath = path.join(DATA_DIR, 'dashboard_analysis.json')
+    await writeJson(filePath, analysis)
+  }
+
+  async loadDashboardAnalysis(): Promise<DashboardAnalysis | null> {
+    const filePath = path.join(DATA_DIR, 'dashboard_analysis.json')
+    return readJson<DashboardAnalysis>(filePath)
   }
 }

@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { revalidatePath } from 'next/cache'
 import { collectChannelErrors } from '@/lib/slack'
 import { getStorageAdapter } from '@/lib/storage/factory'
-import { computeChannelStats } from '@/lib/analysis'
+import { computeChannelStats, computeDashboardStats } from '@/lib/analysis'
+import { analyzeDashboard } from '@/lib/google'
 
 export const maxDuration = 60 // Vercel Pro: 최대 300s, Hobby: 최대 60s
 
@@ -55,6 +56,22 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     const stats = computeChannelStats(channelId, channelName, errors, effectiveDays)
     await storage.saveStats(channelId, stats)
+
+    // 수집 완료 후 AI 분석 1회 실행 → DB 저장
+    try {
+      const allChannels = await storage.listChannels()
+      const allStatsList = await Promise.all(allChannels.map((ch) => storage.loadStats(ch)))
+      const validStats = allStatsList.filter(Boolean) as NonNullable<typeof allStatsList[number]>[]
+      const allErrors = await storage.loadAllErrorEvents()
+
+      if (allErrors.length > 0) {
+        const dashboard = computeDashboardStats(allErrors, validStats)
+        const analysis = await analyzeDashboard(dashboard)
+        await storage.saveDashboardAnalysis(analysis)
+      }
+    } catch (analysisErr) {
+      console.error('[Fetch] AI 분석 실패:', analysisErr instanceof Error ? analysisErr.message : String(analysisErr))
+    }
 
     revalidatePath('/dashboard')
     revalidatePath('/errors')
