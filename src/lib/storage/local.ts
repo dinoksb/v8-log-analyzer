@@ -1,7 +1,7 @@
 import fs from 'fs/promises'
 import path from 'path'
 import { ErrorEvent, ErrorAnalysis, ChannelStats, SlackFetchData, DashboardAnalysis } from '@/lib/types'
-import { StorageAdapter } from './adapter'
+import { StorageAdapter, LoadErrorOptions } from './adapter'
 
 const DATA_DIR = path.join(process.cwd(), 'data')
 
@@ -91,14 +91,19 @@ export class LocalFileStorage implements StorageAdapter {
     }
   }
 
-  async loadAllErrorEvents(): Promise<ErrorEvent[]> {
+  async loadAllErrorEvents(options?: LoadErrorOptions): Promise<ErrorEvent[]> {
     const channels = await this.listChannels()
     const all: ErrorEvent[] = []
     for (const channel of channels) {
       const errors = await this.loadErrorEvents(channel)
       all.push(...errors)
     }
-    return all
+    return all.filter((e) => {
+      const ms = new Date(e.occurredAt).getTime()
+      if (options?.from && ms < new Date(options.from).getTime()) return false
+      if (options?.to && ms > new Date(options.to).getTime()) return false
+      return true
+    })
   }
 
   async saveDashboardAnalysis(analysis: DashboardAnalysis): Promise<void> {
@@ -109,5 +114,15 @@ export class LocalFileStorage implements StorageAdapter {
   async loadDashboardAnalysis(): Promise<DashboardAnalysis | null> {
     const filePath = path.join(DATA_DIR, 'dashboard_analysis.json')
     return readJson<DashboardAnalysis>(filePath)
+  }
+
+  async getLastMessageTs(channel: string): Promise<string | null> {
+    const errors = await this.loadErrorEvents(channel)
+    if (errors.length === 0) return null
+    // Slack ts는 "1234567890.123456" 형식으로 lexicographic 비교 가능
+    return errors.reduce<string | null>((max, e) => {
+      if (max === null) return e.ts
+      return e.ts.localeCompare(max) > 0 ? e.ts : max
+    }, null)
   }
 }

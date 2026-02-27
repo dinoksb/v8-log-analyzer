@@ -1,6 +1,6 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import { ErrorEvent, ErrorAnalysis, ChannelStats, SlackFetchData, DashboardAnalysis } from '@/lib/types'
-import { StorageAdapter } from './adapter'
+import { StorageAdapter, LoadErrorOptions } from './adapter'
 
 function createSupabaseClient(): SupabaseClient {
   const url = process.env.SUPABASE_URL
@@ -90,14 +90,28 @@ export class SupabaseStorage implements StorageAdapter {
   }
 
   async loadErrorEvents(channel: string): Promise<ErrorEvent[]> {
-    const { data, error } = await this.client
-      .from('error_events')
-      .select('*')
-      .eq('channel', channel)
-      .order('occurred_at', { ascending: false })
+    const PAGE_SIZE = 1000
+    const allRows: Record<string, unknown>[] = []
+    let from = 0
 
-    if (error) throw new Error(`Failed to load error events: ${error.message}`)
-    return (data ?? []).map(rowToErrorEvent)
+    while (true) {
+      const { data, error } = await this.client
+        .from('error_events')
+        .select('*')
+        .eq('channel', channel)
+        .order('occurred_at', { ascending: false })
+        .range(from, from + PAGE_SIZE - 1)
+
+      if (error) throw new Error(`Failed to load error events: ${error.message}`)
+
+      const rows = data ?? []
+      allRows.push(...(rows as Record<string, unknown>[]))
+
+      if (rows.length < PAGE_SIZE) break
+      from += PAGE_SIZE
+    }
+
+    return allRows.map(rowToErrorEvent)
   }
 
   async saveErrorEvents(channel: string, errors: ErrorEvent[]): Promise<void> {
@@ -227,14 +241,36 @@ export class SupabaseStorage implements StorageAdapter {
     return channels
   }
 
-  async loadAllErrorEvents(): Promise<ErrorEvent[]> {
-    const { data, error } = await this.client
-      .from('error_events')
-      .select('*')
-      .order('occurred_at', { ascending: false })
+  async loadAllErrorEvents(options?: LoadErrorOptions): Promise<ErrorEvent[]> {
+    const PAGE_SIZE = 1000
+    const allRows: Record<string, unknown>[] = []
+    let from = 0
 
-    if (error) throw new Error(`Failed to load all error events: ${error.message}`)
-    return (data ?? []).map(rowToErrorEvent)
+    while (true) {
+      let query = this.client
+        .from('error_events')
+        .select('*')
+        .order('occurred_at', { ascending: false })
+
+      if (options?.from) {
+        query = query.gte('occurred_at', options.from)
+      }
+      if (options?.to) {
+        query = query.lte('occurred_at', options.to)
+      }
+
+      const { data, error } = await query.range(from, from + PAGE_SIZE - 1)
+
+      if (error) throw new Error(`Failed to load all error events: ${error.message}`)
+
+      const rows = data ?? []
+      allRows.push(...(rows as Record<string, unknown>[]))
+
+      if (rows.length < PAGE_SIZE) break
+      from += PAGE_SIZE
+    }
+
+    return allRows.map(rowToErrorEvent)
   }
 
   async saveDashboardAnalysis(analysis: DashboardAnalysis): Promise<void> {
@@ -269,5 +305,18 @@ export class SupabaseStorage implements StorageAdapter {
       insights: (row.insights as string[]) ?? [],
       analyzedAt: row.analyzed_at as string,
     }
+  }
+
+  async getLastMessageTs(channel: string): Promise<string | null> {
+    const { data, error } = await this.client
+      .from('error_events')
+      .select('ts')
+      .eq('channel', channel)
+      .order('ts', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (error || !data) return null
+    return (data as Record<string, unknown>).ts as string
   }
 }

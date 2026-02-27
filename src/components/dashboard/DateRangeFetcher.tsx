@@ -10,12 +10,11 @@ interface FetchResult {
   fetchedAt: string
 }
 
+const MAX_COLLECT_DAYS = 3
+
 const QUICK_PERIODS = [
   { label: '오늘', days: 0 },
   { label: '3일', days: 3 },
-  { label: '7일', days: 7 },
-  { label: '14일', days: 14 },
-  { label: '30일', days: 30 },
 ]
 
 function toDateString(date: Date): string {
@@ -25,13 +24,19 @@ function toDateString(date: Date): string {
   return `${y}-${m}-${d}`
 }
 
+function addDays(dateStr: string, days: number): string {
+  const d = new Date(`${dateStr}T00:00:00`)
+  d.setDate(d.getDate() + days)
+  return toDateString(d)
+}
+
 export function DateRangeFetcher() {
   const today = toDateString(new Date())
-  const sevenDaysAgo = toDateString(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000))
+  const threeDaysAgo = toDateString(new Date(Date.now() - MAX_COLLECT_DAYS * 24 * 60 * 60 * 1000))
 
-  const [startDate, setStartDate] = useState(sevenDaysAgo)
+  const [startDate, setStartDate] = useState(threeDaysAgo)
   const [endDate, setEndDate] = useState(today)
-  const [activeQuick, setActiveQuick] = useState<number | null>(7)
+  const [activeQuick, setActiveQuick] = useState<number | null>(MAX_COLLECT_DAYS)
   const [channel, setChannel] = useState<SlackChannel | null>(null)
   const [channelLoading, setChannelLoading] = useState(true)
   const [loading, setLoading] = useState(false)
@@ -59,8 +64,15 @@ export function DateRangeFetcher() {
 
   const handleDateChange = (field: 'start' | 'end', value: string) => {
     setActiveQuick(null)
-    if (field === 'start') setStartDate(value)
-    else setEndDate(value)
+    if (field === 'start') {
+      setStartDate(value)
+      const maxEnd = addDays(value, MAX_COLLECT_DAYS)
+      if (endDate > maxEnd) setEndDate(maxEnd < today ? maxEnd : today)
+    } else {
+      const minStart = addDays(value, -MAX_COLLECT_DAYS)
+      if (startDate < minStart) setStartDate(minStart)
+      setEndDate(value)
+    }
   }
 
   const handleFetch = async () => {
@@ -110,6 +122,7 @@ export function DateRangeFetcher() {
         {channel && !channelLoading && (
           <span className="ml-1 text-xs text-gray-400 dark:text-gray-500">#{channel.name}</span>
         )}
+        <span className="ml-auto text-xs text-gray-400 dark:text-gray-500">최대 {MAX_COLLECT_DAYS}일</span>
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
@@ -144,7 +157,7 @@ export function DateRangeFetcher() {
             type="date"
             value={endDate}
             min={startDate}
-            max={today}
+            max={(() => { const m = addDays(startDate, MAX_COLLECT_DAYS); return m < today ? m : today })()}
             onChange={(e) => handleDateChange('end', e.target.value)}
             className="rounded-md border border-gray-300 px-2 py-1 text-sm text-gray-700 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:[color-scheme:dark]"
           />

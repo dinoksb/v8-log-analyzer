@@ -134,6 +134,8 @@ export interface TopErrorItem {
   latestChannel: string
 }
 
+export type ViewPeriod = '1d' | '3d' | '7d' | '30d' | 'all'
+
 export interface DashboardStats {
   totalErrors: number
   analysisCompletedRate: number
@@ -143,6 +145,12 @@ export interface DashboardStats {
   errorTrend: DailyCount[]
   channelActivity: ChannelActivityItem[]
   topErrors: TopErrorItem[]
+  period: {
+    from: string
+    to: string
+    label: string
+    view: ViewPeriod
+  }
 }
 
 export interface ChannelActivityItem {

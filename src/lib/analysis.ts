@@ -5,9 +5,71 @@ import {
   DailyCount,
   HourlyCount,
   ChannelActivityItem,
-  DailyCount as _DailyCount,
   TopErrorItem,
+  ViewPeriod,
 } from '@/lib/types'
+
+const KST_OFFSET_MS = 9 * 60 * 60 * 1000
+
+const VALID_VIEW_PERIODS: ViewPeriod[] = ['1d', '3d', '7d', '30d', 'all']
+
+export function parseViewPeriod(raw: string | undefined, fallback: ViewPeriod = '7d'): ViewPeriod {
+  return (VALID_VIEW_PERIODS as string[]).includes(raw ?? '') ? (raw as ViewPeriod) : fallback
+}
+
+export function resolveViewPeriod(view: ViewPeriod): {
+  fromUtc: string | undefined
+  toUtc: string | undefined
+  fromKst: string
+  toKst: string
+  label: string
+} {
+  if (view === 'all') {
+    return {
+      fromUtc: undefined,
+      toUtc: undefined,
+      fromKst: '',
+      toKst: '',
+      label: '기준: 전체',
+    }
+  }
+
+  const nMap: Record<Exclude<ViewPeriod, 'all'>, number> = {
+    '1d': 1,
+    '3d': 3,
+    '7d': 7,
+    '30d': 30,
+  }
+  const n = nMap[view]
+
+  const nowKstMs = Date.now() + KST_OFFSET_MS
+  const kstMidnightMs = nowKstMs - (nowKstMs % (24 * 60 * 60 * 1000))
+
+  // from: KST 당일 자정 기준 (N-1)일 전 자정 → UTC
+  const fromUtcMs = kstMidnightMs - (n - 1) * 24 * 60 * 60 * 1000 - KST_OFFSET_MS
+  // to: KST 당일 23:59:59.999 → UTC
+  const toUtcMs = kstMidnightMs + 24 * 60 * 60 * 1000 - 1 - KST_OFFSET_MS
+
+  const fromUtc = new Date(fromUtcMs).toISOString()
+  const toUtc = new Date(toUtcMs).toISOString()
+
+  // KST 날짜 문자열 생성
+  const fromKstDate = new Date(fromUtcMs + KST_OFFSET_MS)
+  const toKstDate = new Date(toUtcMs + KST_OFFSET_MS)
+
+  function toDateString(d: Date): string {
+    const y = d.getUTCFullYear()
+    const m = String(d.getUTCMonth() + 1).padStart(2, '0')
+    const day = String(d.getUTCDate()).padStart(2, '0')
+    return `${y}-${m}-${day}`
+  }
+
+  const fromKst = toDateString(fromKstDate)
+  const toKst = toDateString(toKstDate)
+  const label = `기준: ${fromKst} ~ ${toKst} (${n}일)`
+
+  return { fromUtc, toUtc, fromKst, toKst, label }
+}
 
 function formatDateKey(date: Date): string {
   const kst = new Date(date.getTime() + 9 * 60 * 60 * 1000)
@@ -48,7 +110,7 @@ export function computeChannelStats(
       daily.count++
     }
 
-    const hour = date.getHours()
+    const hour = new Date(date.getTime() + KST_OFFSET_MS).getUTCHours()
     const hourly = hourlyMap.get(hour)
     if (hourly) {
       hourly.count++
@@ -76,7 +138,8 @@ export function computeChannelStats(
 
 export function computeDashboardStats(
   allErrors: ErrorEvent[],
-  channelStats: ChannelStats[]
+  channelStats: ChannelStats[],
+  view: ViewPeriod = '7d'
 ): DashboardStats {
   const today = formatDateKey(new Date())
 
@@ -91,19 +154,14 @@ export function computeDashboardStats(
     .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt))
     .slice(0, 10)
 
-  const trendMap = new Map<string, _DailyCount>()
-  for (const cs of channelStats) {
-    for (const d of cs.daily) {
-      const existing = trendMap.get(d.date)
-      if (existing) {
-        existing.count += d.count
-      } else {
-        trendMap.set(d.date, { ...d })
-      }
-    }
+  const trendMap = new Map<string, number>()
+  for (const e of allErrors) {
+    const key = formatDateKey(new Date(e.occurredAt))
+    trendMap.set(key, (trendMap.get(key) ?? 0) + 1)
   }
-
-  const errorTrend = Array.from(trendMap.values()).sort((a, b) => a.date.localeCompare(b.date))
+  const errorTrend: DailyCount[] = Array.from(trendMap.entries())
+    .map(([date, count]) => ({ date, count }))
+    .sort((a, b) => a.date.localeCompare(b.date))
 
   const channelActivity: ChannelActivityItem[] = channelStats.map((cs) => ({
     channelName: cs.channelName,
@@ -149,6 +207,8 @@ export function computeDashboardStats(
       return a.firstOccurredAt.localeCompare(b.firstOccurredAt)
     })
 
+  const resolved = resolveViewPeriod(view)
+
   return {
     totalErrors,
     analysisCompletedRate,
@@ -158,6 +218,12 @@ export function computeDashboardStats(
     errorTrend,
     channelActivity,
     topErrors,
+    period: {
+      from: resolved.fromKst,
+      to: resolved.toKst,
+      label: resolved.label,
+      view,
+    },
   }
 }
 
