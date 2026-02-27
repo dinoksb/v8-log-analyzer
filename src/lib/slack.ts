@@ -278,7 +278,8 @@ export async function fetchThread(
   }
 }
 
-const THREAD_CONCURRENCY = 5
+const THREAD_CONCURRENCY = 2  // rate limit 방지: 동시 요청 수를 낮게 유지
+const MAX_THREAD_FETCH = 20   // Vercel 60s 제한 내 완료 가능한 최대 스레드 수
 
 async function runWithConcurrency<T>(
   tasks: Array<() => Promise<T>>,
@@ -346,11 +347,14 @@ export async function collectChannelErrors(
     const fullText = [m.text, blockText].filter(Boolean).join('\n')
     return isErrorMessage(fullText)
   })
-  const threadsToFetch = errorCandidates.filter((m) => m.replyCount > 0).length
-  console.log(`[Fetch] 오류 후보 ${errorCandidates.length}개, 스레드 ${threadsToFetch}개 수집 예정`)
-
-  // Fetch all threads in parallel (bounded concurrency)
-  const msgsNeedingThreads = errorCandidates.filter((m) => m.replyCount > 0)
+  // Vercel 60s 타임아웃 방지: 스레드는 가장 최근 MAX_THREAD_FETCH개만 수집.
+  // 나머지 오류는 목록에는 표시되며, 개별 refresh-detail 로 스레드 조회 가능.
+  const allNeedingThreads = errorCandidates.filter((m) => m.replyCount > 0)
+  const msgsNeedingThreads = [...allNeedingThreads]
+    .sort((a, b) => b.ts.localeCompare(a.ts))
+    .slice(0, MAX_THREAD_FETCH)
+  const threadsToFetch = msgsNeedingThreads.length
+  console.log(`[Fetch] 오류 후보 ${errorCandidates.length}개, 스레드 ${allNeedingThreads.length}개 중 최근 ${threadsToFetch}개 수집`)
   let threadsFetched = 0
   const threadFetchTasks = msgsNeedingThreads.map((msg) => async () => {
     const fetched = await fetchThread(channelId, msg.ts, token)
